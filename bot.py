@@ -9,6 +9,10 @@ from discord.ext import commands, tasks
 from discord.app_commands import Choice
 from dotenv import load_dotenv
 
+#Youtube import
+import yt_dlp as youtube_dl
+
+FFMPEG_PATH = r"C:\Program Files\ffmpeg\bin\ffmpeg.exe"
 load_dotenv()
 TOKEN = os.getenv('DISCORD_TOKEN')
 
@@ -44,11 +48,23 @@ async def play(interaction: discord.Interaction ,link: str):
     if author.voice is None or author.voice.channel is None:
         await interaction.response.send_message("You need to be in a voice channel, dummy")
         return
+    
     channel = author.voice.channel
-    if interaction.guild.voice_client:
-        vc = interaction.guild.voice_client
-    else:
+    vc = interaction.guild.voice_client
+    if not vc:
         print("Connecting to voicechat...")
-        vc =await channel.connect()
+        vc = await channel.connect()
 
+    #Youtube download options
+    ydl_opts = {'format': 'bestaudio/best', 'extractaudio': True, 'audioformat': 'mp3', 'outtmpl': 'song.%(ext)s', 'quiet': True}
+
+    with youtube_dl.YoutubeDL(ydl_opts) as ydl:
+        info = ydl.extract_info(link, download=False)
+        url = info['url']
+
+    #Play the audio
+    ffmpeg_options = { 'options': '-vn'}
+    vc.play(discord.FFmpegPCMAudio(url,executable=FFMPEG_PATH, **ffmpeg_options))
+
+    await interaction.response.send_message(f"Playing: {info['title']}")
 BOT.run(TOKEN)
