@@ -57,9 +57,11 @@ async def help(interaction: discord.Interaction):
 
 @BOT.tree.command(name="play", description="Plays a song from youtube")
 async def play(interaction: discord.Interaction ,link: str):
+    await interaction.response.defer() #To avoid timeout
+
     author = interaction.user #The user who called the command
     if author.voice is None or author.voice.channel is None:
-        await interaction.response.send_message("You need to be in a voice channel, dummy!")
+        await interaction.followup.send("You need to be in a voice channel, dummy!")
         return
     
     channel = author.voice.channel
@@ -69,7 +71,8 @@ async def play(interaction: discord.Interaction ,link: str):
         queues[interaction.guild.id] = []
 
     #Youtube download options
-    ydl_opts = {'format': 'bestaudio/best', 'extractaudio': True, 'audioformat': 'mp3', 'outtmpl': 'song.%(ext)s', 'quiet': True}
+    #ydl_opts = {'format': 'bestaudio/best', 'extractaudio': True, 'audioformat': 'mp3', 'outtmpl': 'song.%(ext)s', 'quiet': True}
+    ydl_opts = {'format': 'bestaudio/best', 'quiet': True}
 
     with youtube_dl.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(link, download=False)
@@ -78,7 +81,7 @@ async def play(interaction: discord.Interaction ,link: str):
 
     if vc and vc.is_playing():
         queues[interaction.guild.id].append((url, title))
-        await interaction.response.send_message(f" **{title}** added to queue.")
+        await interaction.followup.send(f" **{title}** added to queue.")
     else:
         if not vc:
             print("Connecting to voicechat...")
@@ -87,7 +90,7 @@ async def play(interaction: discord.Interaction ,link: str):
         queues[interaction.guild.id].append((url, title))
         play_next(vc) 
 
-        await interaction.response.send_message(f"Playing: {info['title']}")
+        await interaction.followup.send(f"Playing: {info['title']}")
 
 @BOT.tree.command(name="skip", description="Skips the current song")
 async def skip(interaction: discord.Interaction):
@@ -108,13 +111,15 @@ async def show_queue(interaction: discord.Interaction):
 
 @BOT.tree.command(name="stop", description="Stops the bot and clears the queue")
 async def stop(interaction: discord.Interaction):
+    await interaction.response.defer()
+
     vc = interaction.guild.voice_client
     if vc:
         queues[interaction.guild.id] = []
         vc.stop()
         await vc.disconnect()
-        await interaction.response.send_message(" Stopped playback and cleared the queue")
+        await interaction.followup.send(" Stopped playback and cleared the queue")
     else:
-        await interaction.response.send_message("I'm not in a voice channel, dummy.")
+        await interaction.followup.send("I'm not in a voice channel, dummy.")
 
 BOT.run(TOKEN)
