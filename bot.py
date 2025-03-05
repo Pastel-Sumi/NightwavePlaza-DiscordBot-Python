@@ -46,6 +46,7 @@ def play_next(vc):
         asyncio.create_task(disconnect_after_timeout(vc))
         #asyncio.run_coroutine_threadsafe(vc.disconnect(), BOT.loop)
 
+#Bot disconnects after 5 minutes of no music
 async def disconnect_after_timeout(vc, timeout=300):
     await asyncio.sleep(timeout)
     if not vc.is_playing() and len(queues.get(vc.guild.id, [])) == 0:
@@ -127,5 +128,45 @@ async def stop(interaction: discord.Interaction):
         await interaction.followup.send(" Stopped playback and cleared the queue")
     else:
         await interaction.followup.send("I'm not in a voice channel, dummy.")
+
+
+#Radio
+@BOT.tree.command(name="radio", description="Joins voice channel and connects to Nightwave Plaza")
+async def radio(interaction: discord.Interaction):
+    await interaction.response.defer() #To avoid timeout
+
+    author = interaction.user
+    if author.voice is None or author.voice.channel is None:
+        await interaction.followup.send("You need to be in a voice channel, dummy!")
+        return
+    channel = author.voice.channel
+    vc = interaction.guild.voice_client
+
+    #NIGHTWAVE PLAZA URL
+    RADIO_URL = "https://radio.plaza.one/mp3"
+
+    #Clear queue before playing radio
+    queues[interaction.guild.id] = []
+
+    if vc and vc.is_playing():
+        vc.stop()
+    
+    if not vc:
+        vc = await channel.connect()
+    
+    #Radio stream
+    ffmpeg_options = {"options": "-vn"}
+    vc.play(discord.FFmpegPCMAudio(RADIO_URL, **ffmpeg_options))
+
+    await interaction.followup.send("📻 Now playing: **Nightwave Plaza** 🎶")
+
+@BOT.tree.command(name="stopradio", description="Stops the radio stream and disconnects the bot")
+async def stopradio(interaction: discord.Interaction):
+    vc = interaction.guild.voice_client
+    if vc and vc.is_connected():
+        await vc.disconnect()
+        await interaction.response.send_message("Radio stream stopped and disconnected. Not A E S T H E T I C")
+    else:
+        await interaction.response.send_message("I'm not connected to a voice channel, dummy.")
 
 BOT.run(TOKEN)
