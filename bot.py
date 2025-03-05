@@ -43,7 +43,13 @@ def play_next(vc):
         vc.play(discord.FFmpegPCMAudio(next_url, **ffmpeg_options), after=lambda e:play_next(vc))
         print(f"Now playing: {title}")
     else:
-        asyncio.run_coroutine_threadsafe(vc.disconnect(), BOT.loop)
+        asyncio.create_task(disconnect_after_timeout(vc))
+        #asyncio.run_coroutine_threadsafe(vc.disconnect(), BOT.loop)
+
+async def disconnect_after_timeout(vc, timeout=300):
+    await asyncio.sleep(timeout)
+    if not vc.is_playing() and len(queues.get(vc.guild.id, [])) == 0:
+        await vc.disconnect()
 
 @BOT.tree.command(name="help", description="Give a list of available commands")
 async def help(interaction: discord.Interaction):
