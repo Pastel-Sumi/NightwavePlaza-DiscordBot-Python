@@ -2,8 +2,11 @@
 A small project to learn how discord bots work. A bot that plays streams the nightwave plaza radio. It also plays music from youtube links.
 
 ## To do:
-* ~~Ver como hacer que el bot ponga el link de youtube que le doy en el comando~~
-* Manejar el tema de la queue cuando se le pase una queue o se le ponga play a otro link cuando ya está sonando
-* Que se desconecte solo luego de un rato sin interacción
-* Ver el tema de la radio
-* QoL stuff like mandar que canción está sonando, fijarlo a un canal en específico, etc
+* ~~Play youtube links in voicechat~~
+* ~~Make a queue system~~
+* Make the bot disconnect after 5 minutes without interactions (WIP)
+* ~~Being able to stream the Nightwave Plaza Radio~~
+* Use the metadata of the radio stream to get current song and artist playing.
+* QoL stuff ()
+* Throw everything in a docker/kubernetes (Cause why not, a reason to learn how to use these technologies).
+* Make a tutorial section in how to setup the bot.
