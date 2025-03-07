@@ -1,6 +1,6 @@
 import os
 import asyncio
-import requests
+import subprocess
 import aiohttp
 
 
@@ -8,7 +8,6 @@ import aiohttp
 import discord
 from discord import app_commands
 from discord.ext import commands, tasks
-from discord.app_commands import Choice
 from dotenv import load_dotenv
 
 #Youtube import
@@ -30,6 +29,9 @@ BOT =  commands.Bot(command_prefix="!", intents=intents)
 #Queues
 queues = {}
 
+#Channel where the bot will be locked in
+locked_channel = None 
+
 @BOT.event
 async def on_ready():
     await BOT.wait_until_ready()
@@ -38,61 +40,45 @@ async def on_ready():
     if not hasattr(BOT, 'session'):
         BOT.session = aiohttp.ClientSession()
 
-
     try:
         synced = await BOT.tree.sync()
         print(f"Synced {len(synced)} commands(s).")
     except Exception as e:
         print(f"Failed to sync commands: {e}")
 
+
+def get_radio_metadata():
+    cmd = ["ffmpeg", "-i", RADIO_URL, "-f", "ffmetadata", "-"]
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+        metadata = result.stdout
+        for line in metadata.split("\n"):
+            if "Title" in line:
+                return line.replace("StreamTitle=", "").strip()
+    except Exception as e:
+        print(f"Error fetching metadata: {e}")
+    return "Unknown"
+
 @BOT.event
 async def on_shutdown():
     if hasattr(BOT, "session"):
         await BOT.session.close()
 
-current_song = None 
-async def fetch_metadata(vc):
+#current_song = None 
+async def fetch_metadata(vc, channel):
     """Fetches metadata and updates bot status"""
-    global current_song
+    #global current_song
 
     while vc.is_connected():
         try:
-            headers={"Icy-Metadata": "1"}
-
-            #response = requests.get(RADIO_URL, headers=headers, stream=True)
-            async with BOT.session.get(RADIO_URL, headers=headers) as response:
-                if "icy-metaint" in response.headers:
-                    metaint = int(response.headers["icy-metaint"])
-                    await response.content.read(metaint)
-
-                    #Await the coroutine
-                    metadata_length_bytes = await response.content.read(1)
-                    if metadata_length_bytes:
-                        metadata_length = ord(metadata_length_bytes) * 16 if metadata_length_bytes else 0
-                    else:
-                        metadata_length = 0
-
-                    if metadata_length > 0:
-                        metadata_bytes = await response.content.read(metadata_length)
-                        #metadata = await response.content.read(metadata_length)
-                        metadata =metadata_bytes.decode("utf-8", errors="ignore")
-                        new_song = metadata.split("StreamTitle='")[1].split("';")[0] if "StreamTitle='" in metadata else "Nightwave Plaza"
-
-                        if new_song != current_song:
-                            current_song = new_song
-                            print(f"Now playing: {current_song}")
-                            await BOT.change_presence(activity=discord.Game(name=f"🎶{current_song}"))
-                    
-                    else:
-                        #No metadata available, default to Nightwave Plaza
-                        if current_song != "Nightwave Plaza":
-                            current_song = "Nightwave Plaza"
-                            print(f"Now playing: {current_song}")
-                            await BOT.change_
+            current_song = get_radio_metadata()
+            await BOT.change_presence(activity=discord.Game(name=f"🎶 {current_song}"))
+            await channel.send(f"Now playing: **{current_song}**")
         except Exception as e:
             print(f"Error fetching metadata: {e}")
         
-        await asyncio.sleep(10) #10 seconds before checking again
+        await asyncio.sleep(30) #Check every 30 seconds
+
 #Function to play the next song in the queue
 def play_next(vc):
     # If there are songs in the queue
@@ -120,6 +106,12 @@ async def help(interaction: discord.Interaction):
                                             "* `/help`:\n"+
                                             "   * Shows the user a list of all of this bot's commands.",
                                             ephemeral=True)
+
+@BOT.tree.command(name="setchannel", description= "Locks the bot to a specific channel")
+async def setchannel(interaction: discord.Interaction):
+    global locked_channel
+    locked_channel = interaction.channel.id
+    await interaction.response.send_message(f"Bot is now restricted to <#{locked_channel}>")
 
 @BOT.tree.command(name="play", description="Plays a song from youtube")
 async def play(interaction: discord.Interaction ,link: str):
@@ -175,7 +167,7 @@ async def show_queue(interaction: discord.Interaction):
         queue_list = "\n".join([f"{i+1}. {title}" for i, (_, title) in enumerate(queues[interaction.guild.id])])
         await interaction.response.send_message(f" **Current queue:** \n {queue_list}")
 
-@BOT.tree.command(name="stop", description="Stops the bot and clears the queue")
+@BOT.tree.command(name="stop", description="Stops playback and clears the queue")
 async def stop(interaction: discord.Interaction):
     await interaction.response.defer()
 
@@ -183,17 +175,28 @@ async def stop(interaction: discord.Interaction):
     if vc:
         queues[interaction.guild.id] = []
         vc.stop()
-        await vc.disconnect()
         await BOT.change_presence(activity=None)
         await interaction.followup.send(" Stopped playback and cleared the queue")
     else:
         await interaction.followup.send("I'm not in a voice channel, dummy.")
 
+@BOT.tree.command(name="disconnect", description="Disconnects the bot from the voice channel")
+async def disconnect(interaction: discord.Interaction):
+    vc = interaction.guild.voice_client
+    if vc and vc.is_connected():
+        await vc.disconnect()
+        await interaction.response.send_message("Disconnected from the voice channel. See you space cowboy...")
+    else:
+        await interaction.response.send_message("I'm not connected to a voice channel, dummy!")
 
 #Radio
 @BOT.tree.command(name="radio", description="Joins voice channel and connects to Nightwave Plaza")
 async def radio(interaction: discord.Interaction):
     await interaction.response.defer() #To avoid timeout
+
+    if locked_channel and interaction.channel.id != locked_channel:
+        await interaction.followup.send("This bot is restricted to another channel, dummy!")
+        return 
 
     author = interaction.user
     if author.voice is None or author.voice.channel is None:
@@ -216,8 +219,8 @@ async def radio(interaction: discord.Interaction):
     ffmpeg_options = {"options": "-vn"}
     vc.play(discord.FFmpegPCMAudio(RADIO_URL, **ffmpeg_options))
 
-    BOT.loop.create_task(fetch_metadata(vc))
-
+    BOT.loop.create_task(fetch_metadata(vc, interaction.channel))
+    await BOT.change_presence(activity=discord.Game(name="🎶 Nightwave Plaza"))
     await interaction.followup.send("📻 Welcome to **Nightwave Plaza** 🎶")
 
 @BOT.tree.command(name="stopradio", description="Stops the radio stream and disconnects the bot")
