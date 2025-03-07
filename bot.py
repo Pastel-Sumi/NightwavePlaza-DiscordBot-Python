@@ -1,6 +1,8 @@
 import os
 import asyncio
 import requests
+import aiohttp
+
 
 #Discord related imports
 import discord
@@ -16,6 +18,9 @@ FFMPEG_PATH = r"C:\Program Files\ffmpeg\bin\ffmpeg.exe"
 load_dotenv()
 TOKEN = os.getenv('DISCORD_TOKEN')
 
+#NIGHTWAVE PLAZA URL
+RADIO_URL = "https://radio.plaza.one/mp3"
+
 intents = discord.Intents.default()
 intents.message_content = True
 
@@ -28,12 +33,66 @@ queues = {}
 @BOT.event
 async def on_ready():
     await BOT.wait_until_ready()
+
+    #Initialize aiohttp session for async HTTP requests
+    if not hasattr(BOT, 'session'):
+        BOT.session = aiohttp.ClientSession()
+
+
     try:
         synced = await BOT.tree.sync()
         print(f"Synced {len(synced)} commands(s).")
     except Exception as e:
         print(f"Failed to sync commands: {e}")
 
+@BOT.event
+async def on_shutdown():
+    if hasattr(BOT, "session"):
+        await BOT.session.close()
+
+current_song = None 
+async def fetch_metadata(vc):
+    """Fetches metadata and updates bot status"""
+    global current_song
+
+    while vc.is_connected():
+        try:
+            headers={"Icy-Metadata": "1"}
+
+            #response = requests.get(RADIO_URL, headers=headers, stream=True)
+            async with BOT.session.get(RADIO_URL, headers=headers) as response:
+                if "icy-metaint" in response.headers:
+                    metaint = int(response.headers["icy-metaint"])
+                    await response.content.read(metaint)
+
+                    #Await the coroutine
+                    metadata_length_bytes = await response.content.read(1)
+                    if metadata_length_bytes:
+                        metadata_length = ord(metadata_length_bytes) * 16 if metadata_length_bytes else 0
+                    else:
+                        metadata_length = 0
+
+                    if metadata_length > 0:
+                        metadata_bytes = await response.content.read(metadata_length)
+                        #metadata = await response.content.read(metadata_length)
+                        metadata =metadata_bytes.decode("utf-8", errors="ignore")
+                        new_song = metadata.split("StreamTitle='")[1].split("';")[0] if "StreamTitle='" in metadata else "Nightwave Plaza"
+
+                        if new_song != current_song:
+                            current_song = new_song
+                            print(f"Now playing: {current_song}")
+                            await BOT.change_presence(activity=discord.Game(name=f"🎶{current_song}"))
+                    
+                    else:
+                        #No metadata available, default to Nightwave Plaza
+                        if current_song != "Nightwave Plaza":
+                            current_song = "Nightwave Plaza"
+                            print(f"Now playing: {current_song}")
+                            await BOT.change_
+        except Exception as e:
+            print(f"Error fetching metadata: {e}")
+        
+        await asyncio.sleep(10) #10 seconds before checking again
 #Function to play the next song in the queue
 def play_next(vc):
     # If there are songs in the queue
@@ -97,7 +156,7 @@ async def play(interaction: discord.Interaction ,link: str):
         queues[interaction.guild.id].append((url, title))
         play_next(vc) 
 
-        await interaction.followup.send(f"Playing: {info['title']}")
+        await interaction.followup.send(f"🎶 Playing: {info['title']} 🎶")
 
 @BOT.tree.command(name="skip", description="Skips the current song")
 async def skip(interaction: discord.Interaction):
@@ -125,6 +184,7 @@ async def stop(interaction: discord.Interaction):
         queues[interaction.guild.id] = []
         vc.stop()
         await vc.disconnect()
+        await BOT.change_presence(activity=None)
         await interaction.followup.send(" Stopped playback and cleared the queue")
     else:
         await interaction.followup.send("I'm not in a voice channel, dummy.")
@@ -139,11 +199,9 @@ async def radio(interaction: discord.Interaction):
     if author.voice is None or author.voice.channel is None:
         await interaction.followup.send("You need to be in a voice channel, dummy!")
         return
+    
     channel = author.voice.channel
     vc = interaction.guild.voice_client
-
-    #NIGHTWAVE PLAZA URL
-    RADIO_URL = "https://radio.plaza.one/mp3"
 
     #Clear queue before playing radio
     queues[interaction.guild.id] = []
@@ -158,7 +216,9 @@ async def radio(interaction: discord.Interaction):
     ffmpeg_options = {"options": "-vn"}
     vc.play(discord.FFmpegPCMAudio(RADIO_URL, **ffmpeg_options))
 
-    await interaction.followup.send("📻 Now playing: **Nightwave Plaza** 🎶")
+    BOT.loop.create_task(fetch_metadata(vc))
+
+    await interaction.followup.send("📻 Welcome to **Nightwave Plaza** 🎶")
 
 @BOT.tree.command(name="stopradio", description="Stops the radio stream and disconnects the bot")
 async def stopradio(interaction: discord.Interaction):
