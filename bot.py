@@ -172,13 +172,28 @@ async def skip(interaction: discord.Interaction):
     else:
         await interaction.response.send_message("There is no song playing.")
 
+#RESTART
+@BOT.tree.command(name="restart", description="Restarts the bot")
+async def restart(interaction: discord.Interaction):
+    try:
+        vc = discord.utils.get(BOT.voice_clients, guild=interaction.guild)
+        if vc and vc.is_connected():
+            await vc.disconnect(force=True)
+            await interaction.response.send_message("🔁 Restarting stream...")
+        else:
+            await interaction.response.send_message("🔁 I'm not in a voice channel, dummy! Starting stream...")
+        
+        await play(interaction)
+    except Exception as e:
+        await interaction.response.send_message("❌ Error restarting the stream.")
+        print(f"[ERROR] Command /restart: {e}")
+
 @BOT.tree.command(name="queue", description="Shows the current song queue")
 async def show_queue(interaction: discord.Interaction):
     if interaction.guild.id not in queues or not queues[interaction.guild.id]:
         await interaction.response.send_message("The queue is empty.")
         return
     queue = queues[interaction.guild.id]
-    now_playing_text = ""
     
     vc = interaction.guild.voice_client
 
