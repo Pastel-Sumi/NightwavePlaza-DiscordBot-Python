@@ -2,7 +2,7 @@ import os
 import asyncio
 import subprocess
 import aiohttp
-
+import unicodedata
 
 #Discord related imports
 import discord
@@ -32,6 +32,10 @@ queues = {}
 #Channel where the bot will be locked in
 locked_channel = None 
 
+#Related to unicode and metadata
+def normalize_metadata(text):
+    return unicodedata.normalize("NFKC", text) 
+
 @BOT.event
 async def on_ready():
     await BOT.wait_until_ready()
@@ -50,11 +54,11 @@ async def on_ready():
 def get_radio_metadata():
     cmd = ["ffmpeg", "-i", RADIO_URL, "-f", "ffmetadata", "-"]
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+        result = subprocess.run(cmd, capture_output=True, text=True,encoding="utf-8", timeout=5)
         metadata = result.stdout
         for line in metadata.split("\n"):
             if "Title" in line:
-                return line.replace("StreamTitle=", "").strip()
+                return normalize_metadata(line.replace("StreamTitle=", "").strip())
     except Exception as e:
         print(f"Error fetching metadata: {e}")
     return "Unknown"
