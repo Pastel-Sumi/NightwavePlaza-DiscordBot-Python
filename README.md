@@ -4,7 +4,7 @@ A small project to learn how discord bots work. A bot that plays streams the nig
 ## To do:
 * ~~Play youtube links in voicechat~~
 * ~~Make a queue system~~
-* Make the bot disconnect after 5 minutes without interactions (WIP)
+* ~~Make the bot disconnect after 5 minutes without interactions~~
 * ~~Being able to stream the Nightwave Plaza Radio~~
 * Use the metadata of the radio stream to get current song and artist playing.
 * QoL stuff ()
