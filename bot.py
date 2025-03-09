@@ -80,16 +80,16 @@ async def fetch_metadata(vc, channel):
         await asyncio.sleep(30) #Check every 30 seconds
 
 #Function to play the next song in the queue
-def play_next(vc):
+async def play_next(vc):
     # If there are songs in the queue
     if queues[vc.guild.id]:
         next_url, title = queues[vc.guild.id].pop(0)
         ffmpeg_options = {'options': '-vn'}
-        vc.play(discord.FFmpegPCMAudio(next_url, **ffmpeg_options), after=lambda e:play_next(vc))
-        print(f"Now playing: {title}")
+        vc.play(discord.FFmpegPCMAudio(next_url, **ffmpeg_options), after=lambda e: asyncio.run_coroutine_threadsafe(play_next(vc), BOT.loop))
+        print(f"Now playing: **{title}**")
     else:
-        asyncio.create_task(disconnect_after_timeout(vc))
-        #asyncio.run_coroutine_threadsafe(vc.disconnect(), BOT.loop)
+        #await disconnect_after_timeout(vc)
+        asyncio.run_coroutine_threadsafe(disconnect_after_timeout(vc), BOT.loop)
 
 #Bot disconnects after 5 minutes of no music
 async def disconnect_after_timeout(vc, timeout=300):
@@ -146,7 +146,7 @@ async def play(interaction: discord.Interaction ,link: str):
             vc = await channel.connect()
         
         queues[interaction.guild.id].append((url, title))
-        play_next(vc) 
+        await play_next(vc) 
 
         await interaction.followup.send(f"🎶 Playing: {info['title']} 🎶")
 
