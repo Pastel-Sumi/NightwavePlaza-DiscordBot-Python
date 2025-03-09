@@ -68,26 +68,35 @@ async def on_shutdown():
     if hasattr(BOT, "session"):
         await BOT.session.close()
 
-#current_song = None 
+current_song = None 
 async def fetch_metadata(vc, channel):
     """Fetches metadata and updates bot status"""
-    #global current_song
+    global current_song
 
     while vc.is_connected():
         try:
-            current_song = get_radio_metadata()
-            await BOT.change_presence(activity=discord.Game(name=f"🎶 {current_song}"))
-            await channel.send(f"Now playing: **{current_song}**")
+            new_song = get_radio_metadata()
+
+            #Ignore empty metadata
+            if not new_song or new_song.strip() == "":
+                print("Metadata is empty, keeping previous song")
+                await asyncio.sleep(5) #short delay
+                continue
+
+            if new_song != current_song:
+                current_song = new_song
+                await BOT.change_presence(activity=discord.Game(name=f"🎶 {current_song}"))
+                await channel.send(f"Now playing: **{current_song}**")
         except Exception as e:
             print(f"Error fetching metadata: {e}")
         
-        await asyncio.sleep(30) #Check every 30 seconds
+        await asyncio.sleep(10) #Check every 30 seconds
 
 #Function to play the next song in the queue
 async def play_next(vc):
     # If there are songs in the queue
     if queues[vc.guild.id]:
-        next_url, title = queues[vc.guild.id].pop(0)
+        next_url, title, added_by = queues[vc.guild.id].pop(0)
         ffmpeg_options = {'options': '-vn'}
         vc.play(discord.FFmpegPCMAudio(next_url, **ffmpeg_options), after=lambda e: asyncio.run_coroutine_threadsafe(play_next(vc), BOT.loop))
         print(f"Now playing: **{title}**")
@@ -142,17 +151,17 @@ async def play(interaction: discord.Interaction ,link: str):
         title = info.get('title', 'Unknown Title')
 
     if vc and vc.is_playing():
-        queues[interaction.guild.id].append((url, title))
-        await interaction.followup.send(f" **{title}** added to queue.")
+        queues[interaction.guild.id].append((url, title, author))
+        await interaction.followup.send(f" **{title}** added to queue by {author.mention}.")
     else:
         if not vc:
             print("Connecting to voicechat...")
             vc = await channel.connect()
         
-        queues[interaction.guild.id].append((url, title))
+        queues[interaction.guild.id].append((url, title, author))
         await play_next(vc) 
 
-        await interaction.followup.send(f"🎶 Playing: {info['title']} 🎶")
+        await interaction.followup.send(f"🎶 Playing: **{info['title']}** 🎶")
 
 @BOT.tree.command(name="skip", description="Skips the current song")
 async def skip(interaction: discord.Interaction):
@@ -167,9 +176,20 @@ async def skip(interaction: discord.Interaction):
 async def show_queue(interaction: discord.Interaction):
     if interaction.guild.id not in queues or not queues[interaction.guild.id]:
         await interaction.response.send_message("The queue is empty.")
-    else:
-        queue_list = "\n".join([f"{i+1}. {title}" for i, (_, title) in enumerate(queues[interaction.guild.id])])
-        await interaction.response.send_message(f" **Current queue:** \n {queue_list}")
+        return
+    queue = queues[interaction.guild.id]
+    now_playing_text = ""
+    
+    vc = interaction.guild.voice_client
+
+    queue_list = ""
+    for i, (url, title, added_by) in enumerate(queue[0:], start=1):
+        queue_list += f"{i}. **{title}**\n"
+    
+    await interaction.response.send_message(f"📜 **Queue:**\n {queue_list or 'No more songs in queue.'}")
+    #queue_list = "\n".join([f"{i+1}. {title}" for i, (_, title) in enumerate(queues[interaction.guild.id])])
+    
+    #await interaction.response.send_message(f" **Current queue:** \n {queue_list}")
 
 @BOT.tree.command(name="stop", description="Stops playback and clears the queue")
 async def stop(interaction: discord.Interaction):
