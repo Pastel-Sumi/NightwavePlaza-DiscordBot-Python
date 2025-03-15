@@ -12,5 +12,6 @@ A small project to learn how discord bots work. A bot that plays streams the nig
   * Trying to fix Some micro disconnection issues
   * ~~In process of creating a /reconnect command~~
   * Trying to fix some ffmpeg related issues.
+  * Bot performance improvement
 * Throw everything in a docker/kubernetes (Cause why not, a reason to learn how to use these technologies).
 * Make a tutorial section in how to setup the bot.
